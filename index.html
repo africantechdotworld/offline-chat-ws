@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with friends</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: #f0f2f5;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            margin-top: 20px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background: white;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .message {
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.sent {
+            align-self: flex-end;
+            background-color: #d1ffd6;
+            width: 40%;
+            margin-left: auto;
+        }
+
+        .message.received {
+            align-self: flex-start;
+            background-color: #e1f5fe;
+            width: 40%;
+            margin-right: auto;
+        }
+
+        .input-container {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: #fafafa;
+        }
+
+        .input-container input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        .input-container button {
+            padding: 10px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 4px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="chat-container">
+        <div class="messages" id="messages"></div>
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Type a message...">
+            <button onclick="sendMessage()">Send</button>
+            <input type="file" id="fileInput" onchange="sendFile()" style="margin-left: 10px;">
+        </div>
+    </div>
+    <script>
+        const username = prompt("Enter your username:");
+
+        const socket = new WebSocket('ws://192.168.107.100:8080'); // change this to the wifi ip address you are connected to
+
+        socket.addEventListener('open', function () {
+            console.log("WebSocket connection opened.");
+
+            const text = {
+                type: 'text',
+                content: "username:"+username
+            }
+            socket.send(JSON.stringify(text));
+        });
+
+        socket.addEventListener('message', function (event) {
+            console.log("Received message from server:", event.data);
+            displayMessage(event.data);
+        });
+
+        socket.addEventListener('close', function () {
+            console.log("WebSocket connection closed.");
+        });
+
+        socket.addEventListener('error', function (error) {
+            console.log("WebSocket error:", error);
+        });
+
+        function displayMessage(message) {
+            const messagesContainer = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+
+            
+
+            try {
+                const messageObject = JSON.parse(message);
+                const isSentByUser = messageObject.username == username;
+                messageElement.classList.add('message', isSentByUser ? 'sent' : 'received');
+                if (messageObject.type === 'file') {
+                    console.log("Message is file");
+                    const link = document.createElement('a');
+                    const byteCharacters = new Uint8Array(messageObject.data); // Create Uint8Array from received data
+                    const blob = new Blob([byteCharacters], { type: 'application/octet-stream' });
+                    link.href = URL.createObjectURL(blob);
+                    link.download = messageObject.filename;
+                    link.textContent = `File received: ${messageObject.filename}`;
+
+                    messageElement.appendChild(link);
+                } else {
+                    messageElement.textContent = messageObject.content;
+                    
+                }
+            } catch (e) {
+                messageElement.textContent = message; // Fallback to displaying as text
+                console.log(e);
+            }
+
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const messageText = input.value.trim();
+
+            if (messageText) {
+                const messageData = {
+                    type: 'text', // specify the type
+                    content: messageText // store the actual message content
+                };
+
+                socket.send(JSON.stringify(messageData)); // send as JSON string
+                //displayMessage(`${username}: ${messageText}`);
+                input.value = '';
+            }
+        }
+
+        function sendFile() {
+            const input = document.getElementById('fileInput');
+            const file = input.files[0];
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const fileData = new Uint8Array(event.target.result);; // Get the file data as an ArrayBuffer
+                    const messageData = {
+                        type: 'file',
+                        filetype: file.type,
+                        name: file.name,
+                        data: Array.from(fileData) // Send the raw binary data
+                    };
+                    socket.send(JSON.stringify(messageData)); // Send as JSON string
+                    input.value = ''; // Clear the file input
+                };
+                reader.readAsArrayBuffer(file); // Read file as binary data
+            }
+        }
+        
+    </script>
+</body>
+
+</html>
